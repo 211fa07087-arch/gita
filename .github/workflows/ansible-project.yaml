@@ -27,5 +27,23 @@ jobs:
         run: |
           docker  build -f Dockerfile -t 989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{env.tag_value}} .
           docker push 989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{env.tag_value}}
+  deploy:
+    runs-on: amazonlinux-latest
+    needs: docker-build
+    steps:
+      - name: aws credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ecs-task-def.json
+          service: ecs-service
+          cluster: ecs-cluster
+          wait-for-service-stability: true
+
           
       
