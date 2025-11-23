@@ -28,7 +28,7 @@ jobs:
           docker  build -f Dockerfile -t 989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{env.tag_value}} .
           docker push 989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{env.tag_value}}
   deploy:
-    runs-on: amazonlinux-latest
+    runs-on: ubuntu-latest
     needs: docker-build
     steps:
       - name: aws credentials
