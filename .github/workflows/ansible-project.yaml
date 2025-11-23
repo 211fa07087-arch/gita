@@ -47,25 +47,31 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ap-south-1
 
-    - name: Pull existing ECS task definition
+    - name: Pull existing ECS Task Definition
       run: |
         aws ecs describe-task-definition --task-definition demo --query taskDefinition > task-def.json
 
-    - name: Update container image
+    - name: Update Task Definition Image
       run: |
         NEW_IMAGE="989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{ env.tag_value }}"
         sed -i "s|\"image\": \".*\"|\"image\": \"$NEW_IMAGE\"|" task-def.json
 
-    - name: Clean task definition fields
+    - name: Clean Task Definition JSON
       run: |
-        jq 'del(.taskDefinitionArn, .revision, .status, .registeredAt, .registeredBy, .compatibilities, .requiresAttributes)' task-def.json > clean-task.json
-        mv clean-task.json task-def.json
+        jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' task-def.json > clean-task-def.json
+        mv clean-task-def.json task-def.json
 
-    - name: Deploy new Task Definition to ECS
+    - name: Register Updated Task Definition
+      id: register-task
+      run: |
+        ARN=$(aws ecs register-task-definition --cli-input-json file://task-def.json --query "taskDefinition.taskDefinitionArn" --output text)
+        echo "TASK_ARN=$ARN" >> $GITHUB_ENV
+        echo "New Task Definition: $ARN"
+
+    - name: Deploy to ECS
       uses: aws-actions/amazon-ecs-deploy-task-definition@v2
       with:
-        task-definition: task-def.json
-        service: ecs-service
-        cluster: ecs-cluster
-        force-new-deployment: true
+        task-definition: ${{ env.TASK_ARN }}
+        service: demo-service-pnni7q54
+        cluster: demo
         wait-for-service-stability: true
