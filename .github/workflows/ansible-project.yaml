@@ -36,40 +36,42 @@ jobs:
     needs: docker-build
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v2
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-south-1
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ap-south-1
 
-      - name: Export Task Definition
-        run: |
-          aws ecs describe-task-definition --task-definition demo --query taskDefinition > task-def.json
+    - name: Pull existing ECS Task Definition
+      run: |
+        aws ecs describe-task-definition --task-definition demo --query taskDefinition > task-def.json
 
-      - name: Update container image
-        run: |
-          NEW_IMAGE="989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{ env.tag_value }}"
-          sed -i "s|\"image\": \".*\"|\"image\": \"$NEW_IMAGE\"|" task-def.json
+    - name: Update Task Definition Image
+      run: |
+        NEW_IMAGE="989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{ env.tag_value }}"
+        sed -i "s|\"image\": \".*\"|\"image\": \"$NEW_IMAGE\"|" task-def.json
 
-      - name: Clean Task Definition
-        run: |
-          jq 'del(.taskDefinitionArn, .revision, .status, .compatibilities, .requiresAttributes, .registeredAt, .registeredBy)' task-def.json > clean-task-def.json
-          mv clean-task-def.json task-def.json
+    - name: Clean Task Definition JSON
+      run: |
+        jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' task-def.json > new-task-def.json
 
-      - name: Register Updated Task Definition
-        id: register
-        run: |
-          ARN=$(aws ecs register-task-definition --cli-input-json file://task-def.json --query "taskDefinition.taskDefinitionArn" --output text)
-          echo "taskArn=$ARN" >> $GITHUB_OUTPUT
+    - name: Register New Task Definition
+      id: register
+      run: |
+        aws ecs register-task-definition --cli-input-json file://new-task-def.json > output.json
+        TASK_FAMILY=$(jq -r '.taskDefinition.family' output.json)
+        echo "task_def_file=new-task-def.json" >> $GITHUB_OUTPUT
+        echo "Registered Task Family: $TASK_FAMILY"
 
-      - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition-arn: ${{ steps.register.outputs.taskArn }}
-          service: demo-service-pnni7q54
-          cluster: demo
-          wait-for-service-stability: true
+    - name: Deploy New Task Definition to ECS
+      uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+      with:
+        task-definition: new-task-def.json   # <-- FIXED
+        service: demo-service-pnni7q54
+        cluster: demo
+        wait-for-service-stability: true
+
