@@ -68,7 +68,7 @@ jobs:
           echo "task_definition_arn=$ARN" >> $GITHUB_ENV
 
       - name: Deploy New Task Definition to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ env.task_definition_arn }}
           service: ecs-service
