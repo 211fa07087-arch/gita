@@ -5,38 +5,30 @@ on:
     branches:
       - main
 
-env:name: yash
-
-on:
-  push:
-    branches:
-      - main
-
 env:
   tag_value: ${{ github.sha }}
 
 jobs:
-
   docker-build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-south-1
 
       - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, tag, and push image to Amazon ECR
+      - name: Build, tag, and push image to ECR
         run: |
-          docker build -f Dockerfile -t 989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{ env.tag_value }} .
+          docker build -t 989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{ env.tag_value }} .
           docker push 989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{ env.tag_value }}
 
   deploy:
@@ -44,110 +36,40 @@ jobs:
     needs: docker-build
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
-
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ap-south-1
-
-    - name: Pull existing ECS Task Definition
-      run: |
-        aws ecs describe-task-definition --task-definition demo --query taskDefinition > task-def.json
-
-    - name: Update Task Definition Image
-      run: |
-        NEW_IMAGE="989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{ env.tag_value }}"
-        sed -i "s|\"image\": \".*\"|\"image\": \"$NEW_IMAGE\"|" task-def.json
-
-    - name: Clean Task Definition JSON
-      run: |
-        jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' task-def.json > clean-task-def.json
-        mv clean-task-def.json task-def.json
-
-    - name: Register Updated Task Definition
-      id: register-task
-      run: |
-        ARN=$(aws ecs register-task-definition --cli-input-json file://task-def.json --query "taskDefinition.taskDefinitionArn" --output text)
-        echo "::set-output name=taskArn::$ARN"
-
-    - name: Deploy to ECS
-      uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-      with:
-        task-definition: ${{ steps.register-task.outputs.taskArn }}
-        service: demo-service-pnni7q54
-        cluster: demo
-        wait-for-service-stability: true
-
-  tag_value: ${{ github.sha }}
-
-jobs:
-
-  docker-build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-south-1
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-
-      - name: Build, tag, and push image to Amazon ECR
+      - name: Export Task Definition
         run: |
-          docker build -f Dockerfile -t 989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{ env.tag_value }} .
-          docker push 989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{ env.tag_value }}
+          aws ecs describe-task-definition --task-definition demo --query taskDefinition > task-def.json
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: docker-build
+      - name: Update container image
+        run: |
+          NEW_IMAGE="989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{ env.tag_value }}"
+          sed -i "s|\"image\": \".*\"|\"image\": \"$NEW_IMAGE\"|" task-def.json
 
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
+      - name: Clean Task Definition
+        run: |
+          jq 'del(.taskDefinitionArn, .revision, .status, .compatibilities, .requiresAttributes, .registeredAt, .registeredBy)' task-def.json > clean-task-def.json
+          mv clean-task-def.json task-def.json
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ap-south-1
+      - name: Register Updated Task Definition
+        id: register
+        run: |
+          ARN=$(aws ecs register-task-definition --cli-input-json file://task-def.json --query "taskDefinition.taskDefinitionArn" --output text)
+          echo "taskArn=$ARN" >> $GITHUB_OUTPUT
 
-    - name: Pull existing ECS Task Definition
-      run: |
-        aws ecs describe-task-definition --task-definition demo --query taskDefinition > task-def.json
-
-    - name: Update Task Definition Image
-      run: |
-        NEW_IMAGE="989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{ env.tag_value }}"
-        sed -i "s|\"image\": \".*\"|\"image\": \"$NEW_IMAGE\"|" task-def.json
-
-    - name: Clean Task Definition JSON
-      run: |
-        jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' task-def.json > clean-task-def.json
-        mv clean-task-def.json task-def.json
-
-    - name: Register Updated Task Definition
-      id: register-task
-      run: |
-        ARN=$(aws ecs register-task-definition --cli-input-json file://task-def.json --query "taskDefinition.taskDefinitionArn" --output text)
-        echo "TASK_ARN=$ARN" >> $GITHUB_ENV
-        echo "New Task Definition: $ARN"
-
-    - name: Deploy to ECS
-      uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-      with:
-        task-definition: ${{ env.TASK_ARN }}
-        service: demo-service-pnni7q54
-        cluster: demo
-        wait-for-service-stability: true
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.register.outputs.taskArn }}
+          service: demo-service-pnni7q54
+          cluster: demo
+          wait-for-service-stability: true
