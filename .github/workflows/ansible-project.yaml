@@ -33,44 +33,39 @@ jobs:
           docker push 989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{ env.tag_value }}
 
   deploy:
-    runs-on: ubuntu-latest
-    needs: docker-build
+  runs-on: ubuntu-latest
+  needs: docker-build
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-south-1
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ap-south-1
 
-      - name: Pull existing ECS Task Definition
-        run: |
-          aws ecs describe-task-definition --task-definition demo --query taskDefinition > task-def.json
+    - name: Pull existing ECS task definition
+      run: |
+        aws ecs describe-task-definition --task-definition demo --query taskDefinition > task-def.json
 
-      - name: Update Task Definition Image
-        run: |
-          NEW_IMAGE="989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{ env.tag_value }}"
-          sed -i "s|\"image\": \".*\"|\"image\": \"$NEW_IMAGE\"|" task-def.json
+    - name: Update container image
+      run: |
+        NEW_IMAGE="989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{ env.tag_value }}"
+        sed -i "s|\"image\": \".*\"|\"image\": \"$NEW_IMAGE\"|" task-def.json
 
-      - name: Clean Task Definition
-        run: |
-          jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' task-def.json > clean-task-def.json
-          mv clean-task-def.json task-def.json
+    - name: Clean task definition fields
+      run: |
+        jq 'del(.taskDefinitionArn, .revision, .status, .registeredAt, .registeredBy, .compatibilities, .requiresAttributes)' task-def.json > clean-task.json
+        mv clean-task.json task-def.json
 
-      - name: Register Updated Task Definition
-        id: register-task
-        run: |
-          ARN=$(aws ecs register-task-definition --cli-input-json file://task-def.json --query "taskDefinition.taskDefinitionArn" --output text)
-          echo "task_definition_arn=$ARN" >> $GITHUB_ENV
-
-      - name: Deploy New Task Definition to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition-arn: ${{ env.task_definition_arn }}
-          service: ecs-service
-          cluster: ecs-cluster
-          wait-for-service-stability: true
+    - name: Deploy new Task Definition to ECS
+      uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+      with:
+        task-definition: task-def.json
+        service: ecs-service
+        cluster: ecs-cluster
+        force-new-deployment: true
+        wait-for-service-stability: true
