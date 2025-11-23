@@ -69,7 +69,7 @@ jobs:
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
-          task-definition: ${{ steps.register.outputs.taskArn }}
+          task-definition-arn: ${{ steps.register.outputs.taskArn }}
           service: demo-service-pnni7q54
           cluster: demo
           wait-for-service-stability: true
