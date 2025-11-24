@@ -36,7 +36,7 @@ jobs:
     needs: build
     runs-on: amazonlinux-latest
     steps:
-      - name: Deploy to EC2
+      - name: Deploy to EC22
         uses: appleboy/ssh-action@v0.1.5
         with:
           host: ${{ secrets.EC2_HOST }}
