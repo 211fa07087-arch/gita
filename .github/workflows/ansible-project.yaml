@@ -10,7 +10,7 @@ env:
 
 jobs:
   build:
-    runs-on: amazonlinux-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -31,12 +31,11 @@ jobs:
           docker tag app:${{ env.tag_value }} 989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{ env.tag_value }}
           docker push 989007362438.dkr.ecr.ap-south-1.amazonaws.com/app:${{ env.tag_value }}
 
-
   deployjob:
     needs: build
-    runs-on: amazonlinux-latest
+    runs-on: ubuntu-latest
     steps:
-      - name: Deploy to EC22
+      - name: Deploy to EC2
         uses: appleboy/ssh-action@v0.1.5
         with:
           host: ${{ secrets.EC2_HOST }}
